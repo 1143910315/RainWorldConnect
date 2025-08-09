@@ -64,7 +64,7 @@
                         Grid.Column="6"
                         x:Name="UdpPortLabel"
                         VerticalOptions="Center"
-                        Text="起始分配UDP端口："
+                        Text="本机UDP端口："
                         IsEnabled="False"></Label>
                     <Entry
                         Grid.Column="7"
@@ -134,7 +134,7 @@
 
                                         <Entry
                                             Grid.Column="4"
-                                            Text="{Binding NumericId, Mode=TwoWay}"
+                                            Text="{Binding Port, Mode=TwoWay}"
                                             Keyboard="Numeric"
                                             TextColor="#2c3e50"
                                             FontSize="15" />

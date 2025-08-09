@@ -3,19 +3,31 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TouchSocket.Core;
 
 namespace RainWorldConnect {
-    public partial class PlayerData(string deviceId, string remark, int numericId) : ObservableObject {
-        private string _deviceId = deviceId;
+    public partial class PlayerData : ObservableObject {
+        private string _clientId = "";
+        public string ClientId {
+            get => _clientId;
+            set => SetProperty(ref _clientId, value);
+        }
+
+        private string _deviceId = "";
         public string DeviceId {
             get => _deviceId;
             set => SetProperty(ref _deviceId, value);
         }
 
-        private string _remark = remark;
+        private string _remark = "";
         public string Remark {
             get => _remark;
             set {
+                if (value.IsNullOrWhiteSpace()) {
+                    Preferences.Remove("remark_" + DeviceId);
+                } else {
+                    Preferences.Set("remark_" + DeviceId, value);
+                }
                 // 设置值并触发通知
                 if (SetProperty(ref _remark, value)) {
                     // 当Remark改变时，同时通知DisplayId更新
@@ -24,10 +36,10 @@ namespace RainWorldConnect {
             }
         }
 
-        private int _numericId = numericId;
-        public int NumericId {
-            get => _numericId;
-            set => SetProperty(ref _numericId, value,
+        private int _port = 0;
+        public int Port {
+            get => _port;
+            set => SetProperty(ref _port, value,
                 validate: (oldVal, newVal) => newVal >= 0); // 带验证
         }
 

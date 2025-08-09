@@ -31,11 +31,11 @@ namespace RainWorldConnect {
 
         private void AddNewItem() {
             var deviceId = GenerateDeviceId();
-            PlayerDataList.Add(new PlayerData(
-                 deviceId,
-                 "",
-                 _counter++
-            ));
+            PlayerDataList.Add(new PlayerData {
+                DeviceId = deviceId,
+                Remark = "",
+                Port = _counter++
+            });
         }
 
         private void DeleteItem(PlayerData item) {
