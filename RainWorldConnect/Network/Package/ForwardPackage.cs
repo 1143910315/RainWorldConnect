@@ -7,21 +7,12 @@ using TouchSocket.Core;
 
 namespace RainWorldConnect.Network.Data {
     [GeneratorPackage]
-    internal partial class UserData : PackageBase {
+    internal partial class ForwardPackage : PackageBase {
+        public const int PackageId = 2;
         [PackageMember(Index = 0)]
-        public string DeviceId {
-            get; set;
-        } = "";
+        public int Port { get; set; } = 0;
         [PackageMember(Index = 1)]
-        public int Port {
-            get; set;
-        } = 0;
-    }
-    [GeneratorPackage]
-    internal partial class AllUserInfoPackage : PackageBase {
-        public const int PackageId = 1;
-        [PackageMember(Index = 0)]
-        public UserData[] UserDataList {
+        public byte[] Bytes {
             get; set;
         } = [];
         public ByteBlock ToByteBlock() {

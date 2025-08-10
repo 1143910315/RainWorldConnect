@@ -81,7 +81,7 @@
                     <Entry
                         Grid.Column="10"
                         x:Name="RemoteHostEntry"
-                        Text="127.0.0.1:7777"
+                        Text="127.0.0.1:12345"
                         IsEnabled="True"
                         TextChanged="RemoteHostEntry_TextChanged"></Entry>
                 </Grid>
