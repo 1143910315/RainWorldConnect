@@ -112,7 +112,7 @@ namespace RainWorldConnect {
             }
         }
 
-        public async Task StartUdpProxy(int udpPort) {
+        public void StartUdpProxy(int udpPort) {
             try {
                 _cancellationSource = new CancellationTokenSource();
                 CancellationToken token = _cancellationSource.Token;
@@ -122,7 +122,7 @@ namespace RainWorldConnect {
                 _clientSocket.Bind(new IPEndPoint(IPAddress.Parse("127.0.0.1"), udpPort));
                 udpConnections[udpPort] = _clientSocket;
                 // 启动UDP接收任务
-                await Task.Run(() => ReceiveUdpData(udpPort, token), token).ConfigureFalseAwait();
+                _ = Task.Run(() => ReceiveUdpData(udpPort, token), token).ConfigureFalseAwait();
             } catch (Exception) {
             }
         }
@@ -149,55 +149,60 @@ namespace RainWorldConnect {
 
         private async Task ReceiveUdpData(int udpPort, CancellationToken token) {
             try {
-                byte[] buffer = new byte[65507 + 4]; // UDP最大包大小 + 四字节长度
+                byte[] buffer = new byte[65507]; // UDP最大包大小 + 四字节长度
                 IPEndPoint endpoint = new(IPAddress.Any, 0);
 
                 Socket udpSocket = udpConnections[udpPort];
 
                 while (!token.IsCancellationRequested) {
                     try {
-                        SocketReceiveFromResult result = await udpSocket.ReceiveFromAsync(buffer.AsMemory(8), SocketFlags.None, endpoint, token);
+                        SocketReceiveFromResult result = await udpSocket.ReceiveFromAsync(buffer, SocketFlags.None, endpoint, token);
                         if (result.ReceivedBytes == 0) {
                             continue;
                         }
-
                         if (_tcpClient is TcpClient tcpClient) {
                             if (Application.Current is Application application) {
                                 await application.Dispatcher.DispatchAsync(async () => {
                                     if (BindingContext is PlayerListViewModel playerListViewModel) {
-                                        if (playerListViewModel.PlayerDataList.First(p => p.DeviceId == deviceId).Port != endpoint.Port) {
-                                            BindPortPackage bindPortPackage = new() {
-                                                Port = endpoint.Port,
-                                            };
-                                            using ByteBlock bindPortByteBlock = bindPortPackage.ToByteBlock();
-                                            await tcpClient.SendAsync(bindPortByteBlock.Memory).ConfigureFalseAwait();
+                                        if (result.RemoteEndPoint is IPEndPoint remoteEndPoint) {
+                                            if (playerListViewModel.PlayerDataList.First(p => p.DeviceId == deviceId).Port != remoteEndPoint.Port) {
+                                                BindPortPackage bindPortPackage = new() {
+                                                    Port = remoteEndPoint.Port,
+                                                };
+                                                using ByteBlock bindPortByteBlock = bindPortPackage.ToByteBlock();
+                                                await tcpClient.SendAsync(bindPortByteBlock.Memory).ConfigureFalseAwait();
+                                            }
                                         }
+
                                     }
                                 });
                             }
-                            // 添加包类型
-                            BitConverter.TryWriteBytes(buffer.AsSpan(0, 4), 2);
-                            // 添加端口
-                            BitConverter.TryWriteBytes(buffer.AsSpan(4, 4), udpPort);
-                            await tcpClient.SendAsync(buffer.AsMemory(0, result.ReceivedBytes + 8)).ConfigureFalseAwait();
+                            ForwardPackage forwardPackage = new() {
+                                Port = udpPort,
+                                Bytes = buffer.AsMemory(0, result.ReceivedBytes).ToArray()
+                            };
+                            using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
+                            await tcpClient.SendAsync(forwardByteBlock.Memory).ConfigureFalseAwait();
                         } else if (_tcpService is TcpService tcpService) {
                             if (Application.Current is Application application) {
                                 await application.Dispatcher.DispatchAsync(async () => {
                                     if (BindingContext is PlayerListViewModel playerListViewModel) {
-                                        PlayerData playerData = playerListViewModel.PlayerDataList.First(p => p.ClientId == "");
-                                        PlayerData targetPlayerData = playerListViewModel.PlayerDataList.First(p => p.Port == udpPort);
-                                        if (playerData.Port != endpoint.Port) {
-                                        }
-                                        // 添加包类型
-                                        BitConverter.TryWriteBytes(buffer.AsSpan(0, 4), 2);
-                                        // 添加端口
-                                        BitConverter.TryWriteBytes(buffer.AsSpan(4, 4), endpoint.Port);
-                                        await tcpService.SendAsync(targetPlayerData.ClientId, buffer.AsMemory(0, result.ReceivedBytes + 8)).ConfigureFalseAwait();
+                                        if (result.RemoteEndPoint is IPEndPoint remoteEndPoint) {
+                                            PlayerData playerData = playerListViewModel.PlayerDataList.First(p => p.ClientId == "");
+                                            PlayerData targetPlayerData = playerListViewModel.PlayerDataList.First(p => p.Port == udpPort);
+                                            if (playerData.Port != remoteEndPoint.Port) {
+                                            }
+                                            ForwardPackage forwardPackage = new() {
+                                                Port = remoteEndPoint.Port,
+                                                Bytes = buffer.AsMemory(0, result.ReceivedBytes).ToArray()
+                                            };
+                                            using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
+                                            await tcpService.SendAsync(targetPlayerData.ClientId, forwardByteBlock.Memory).ConfigureFalseAwait();
+                                        }                                        
                                     }
                                 }).ConfigureFalseAwait();
                             }
                         }
-
                     } catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset) {
                     }
                 }
@@ -254,7 +259,7 @@ namespace RainWorldConnect {
                         if (BindingContext is PlayerListViewModel playerListViewModel) {
                             playerListViewModel.PlayerDataList.First(p => p.ClientId == client.Id).Port = bindPortPackage.Port;
                             if (bindPortPackage.Port != 0 && !udpConnections.ContainsKey(bindPortPackage.Port)) {
-                                await StartUdpProxy(bindPortPackage.Port);
+                                StartUdpProxy(bindPortPackage.Port);
                             }
                             AllUserInfoPackage allUserInfoPackage = new() {
                                 UserDataList = [.. playerListViewModel.PlayerDataList.Select(p => {
@@ -297,7 +302,7 @@ namespace RainWorldConnect {
             ForwardPackage forwardPackage = new();
             if (allUserInfoPackage.FromByteBlock(byteBlock)) {
                 if (Application.Current is Application application) {
-                    await application.Dispatcher.DispatchAsync(async () => {
+                    await application.Dispatcher.DispatchAsync(() => {
                         if (BindingContext is PlayerListViewModel playerListViewModel) {
                             playerListViewModel.PlayerDataList.Clear();
                             foreach (UserData userData in allUserInfoPackage.UserDataList) {
@@ -307,7 +312,7 @@ namespace RainWorldConnect {
                                     Port = userData.Port
                                 });
                                 if (userData.DeviceId != deviceId && !udpConnections.ContainsKey(userData.Port)) {
-                                    await StartUdpProxy(userData.Port);
+                                    StartUdpProxy(userData.Port);
                                 }
                             }
 
