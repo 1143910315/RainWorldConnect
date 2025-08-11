@@ -14,7 +14,6 @@ namespace RainWorldConnect {
         private readonly ConcurrentDictionary<int, Socket> udpConnections = new();
         private TcpService? _tcpService;
         private TcpClient? _tcpClient;
-        private int lastUdpPort = 0;
         private readonly string deviceId = "";
 
         public MainPage() {
@@ -141,7 +140,6 @@ namespace RainWorldConnect {
                 v.Close();
             }
             udpConnections.Clear();
-            lastUdpPort = 0;
             if (BindingContext is PlayerListViewModel playerListViewModel) {
                 playerListViewModel.PlayerDataList.Clear();
             }
@@ -198,7 +196,7 @@ namespace RainWorldConnect {
                                             };
                                             using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
                                             await tcpService.SendAsync(targetPlayerData.ClientId, forwardByteBlock.Memory).ConfigureFalseAwait();
-                                        }                                        
+                                        }
                                     }
                                 }).ConfigureFalseAwait();
                             }
@@ -276,10 +274,16 @@ namespace RainWorldConnect {
                     await application.Dispatcher.DispatchAsync(async () => {
                         if (BindingContext is PlayerListViewModel playerListViewModel) {
                             string clientID = playerListViewModel.PlayerDataList.First(p => p.Port == forwardPackage.Port).ClientId;
+                            IPEndPoint endpoint = new(IPAddress.Parse("127.0.0.1"), forwardPackage.Port);
+                            forwardPackage.Port = playerListViewModel.PlayerDataList.First(p => p.ClientId == client.Id).Port;
                             if (_tcpService is TcpService tcpService) {
-                                forwardPackage.Port = playerListViewModel.PlayerDataList.First(p => p.ClientId == client.Id).Port;
-                                using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
-                                await tcpService.SendAsync(clientID, forwardByteBlock.Memory).ConfigureFalseAwait();
+                                if (clientID.IsNullOrWhiteSpace()) {
+                                    await udpConnections[forwardPackage.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
+                                } else {
+                                    using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
+                                    await tcpService.SendAsync(clientID, forwardByteBlock.Memory).ConfigureFalseAwait();
+                                }
+
                             }
                         }
                     }).ConfigureFalseAwait();
@@ -320,8 +324,14 @@ namespace RainWorldConnect {
                     }).ConfigureFalseAwait();
                 }
             } else if (forwardPackage.FromByteBlock(byteBlock)) {
-                IPEndPoint endpoint = new(IPAddress.Any, lastUdpPort);
-                await udpConnections[forwardPackage.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
+                if (Application.Current is Application application) {
+                    await application.Dispatcher.DispatchAsync(async () => {
+                        if (BindingContext is PlayerListViewModel playerListViewModel) {
+                            IPEndPoint endpoint = new(IPAddress.Parse("127.0.0.1"), playerListViewModel.PlayerDataList.First(p => p.DeviceId == deviceId).Port);
+                            await udpConnections[forwardPackage.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
+                        }
+                    }).ConfigureFalseAwait();
+                }
             }
         }
     }
