@@ -247,7 +247,13 @@ namespace RainWorldConnect {
                                 })]
                             };
                             using ByteBlock allUserInfoByteBlock = allUserInfoPackage.ToByteBlock();
-                            await client.SendAsync(allUserInfoByteBlock.Memory).ConfigureFalseAwait();
+                            if (_tcpService is TcpService tcpService) {
+                                foreach (var player in playerListViewModel.PlayerDataList) {
+                                    if (!player.ClientId.IsNullOrWhiteSpace()) {
+                                        await tcpService.SendAsync(player.ClientId, allUserInfoByteBlock.Memory);
+                                    }
+                                }
+                            }
                         }
                     }).ConfigureFalseAwait();
                 }
@@ -265,7 +271,13 @@ namespace RainWorldConnect {
                                 })]
                             };
                             using ByteBlock allUserInfoByteBlock = allUserInfoPackage.ToByteBlock();
-                            await client.SendAsync(allUserInfoByteBlock.Memory).ConfigureFalseAwait();
+                            if (_tcpService is TcpService tcpService) {
+                                foreach (var player in playerListViewModel.PlayerDataList) {
+                                    if (!player.ClientId.IsNullOrWhiteSpace()) {
+                                        await tcpService.SendAsync(player.ClientId, allUserInfoByteBlock.Memory);
+                                    }
+                                }
+                            }
                         }
                     }).ConfigureFalseAwait();
                 }
@@ -319,7 +331,6 @@ namespace RainWorldConnect {
                                     StartUdpProxy(userData.Port);
                                 }
                             }
-
                         }
                     }).ConfigureFalseAwait();
                 }
