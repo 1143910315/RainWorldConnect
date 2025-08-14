@@ -69,51 +69,65 @@ namespace RainWorldConnect {
         }
 
         private async void ConfimButton_Clicked(object sender, EventArgs e) {
-            await StopProxyAsync();
-            if (IsHostCheckBox.IsChecked) {
-                int port = int.Parse(TcpPortEntry.Text);
-                if (BindingContext is PlayerListViewModel playerListViewModel) {
-                    playerListViewModel.PlayerDataList.Add(new PlayerData {
-                        DeviceId = deviceId,
-                        Port = int.Parse(UdpPortEntry.Text)
-                    });
+            try {
+                await StopProxyAsync();
+                _cancellationSource = new CancellationTokenSource();
+                if (IsHostCheckBox.IsChecked) {
+                    int port = int.Parse(TcpPortEntry.Text);
+                    if (BindingContext is PlayerListViewModel playerListViewModel) {
+                        playerListViewModel.PlayerDataList.Add(new PlayerData {
+                            DeviceId = deviceId,
+                            Port = int.Parse(UdpPortEntry.Text)
+                        });
+                    }
+                    _tcpService = new();
+                    _tcpService.Connected += OnClientConnected;
+                    _tcpService.Closed += OnClientDisconnected;
+                    _tcpService.Received += OnClientDataReceived;
+                    await _tcpService.SetupAsync(new TouchSocketConfig()
+                        .SetListenIPHosts($"0.0.0.0:{port}", $"[::]:{port}")
+                        .SetTcpDataHandlingAdapter(() => new FixedHeaderPackageAdapter() {
+                            FixedHeaderType = FixedHeaderType.Int
+                        })
+                        .ConfigureContainer(a => {
+                            a.AddEasyLogger((logLevel, obj, loggerString, ex) => { });//添加一个日志注入
+                        }));
+                    try {
+                        await _tcpService.StartAsync();
+                    } catch (Exception ex) {
+                        await DisplayAlert("错误", $"尝试在{port}端口启动服务器时出现问题，疑似端口占用，更换端口可能解决问题。\n发生异常: {ex.Message}", "确定");
+                        await StopProxyAsync();
+                    }
+                } else {
+                    _tcpClient = new();
+                    _tcpClient.Connected += OnConnected;
+                    _tcpClient.Received += OnDataReceived;
+
+                    //载入配置
+                    await _tcpClient.SetupAsync(new TouchSocketConfig()
+                         .SetRemoteIPHost(RemoteHostEntry.Text)
+                         .SetTcpDataHandlingAdapter(() => new FixedHeaderPackageAdapter() { FixedHeaderType = FixedHeaderType.Int })
+                         .ConfigureContainer(a => {
+                             a.AddEasyLogger((logLevel, obj, loggerString, ex) => { });//添加一个日志注入
+                         })
+                         .ConfigurePlugins(a => {
+                             a.UseTcpReconnection();// 自动重连
+                         }));
+                    try {
+                        await _tcpClient.ConnectAsync();
+                    } catch (Exception ex) {
+                        await DisplayAlert("错误", $"尝试连接到{RemoteHostEntry.Text}时出现问题，疑似地址错误、端口错误或者无网络，无法连接。\n发生异常: {ex.Message}", "确定");
+                        await StopProxyAsync();
+                    }
                 }
-                _tcpService = new();
-                _tcpService.Connected += OnClientConnected;
-                _tcpService.Closed += OnClientDisconnected;
-                _tcpService.Received += OnClientDataReceived;
-                await _tcpService.SetupAsync(new TouchSocketConfig()
-                    .SetListenIPHosts($"0.0.0.0:{port}", $"[::]:{port}")
-                    .SetTcpDataHandlingAdapter(() => new FixedHeaderPackageAdapter() {
-                        FixedHeaderType = FixedHeaderType.Int
-                    })
-                    .ConfigureContainer(a => {
-                        a.AddEasyLogger((logLevel, obj, loggerString, ex) => { });//添加一个日志注入
-                    }));
-                await _tcpService.StartAsync();
-            } else {
-                _tcpClient = new();
-                _tcpClient.Connected += OnConnected;
-                _tcpClient.Received += OnDataReceived;
-
-                //载入配置
-                await _tcpClient.SetupAsync(new TouchSocketConfig()
-                     .SetRemoteIPHost(RemoteHostEntry.Text)
-                     .SetTcpDataHandlingAdapter(() => new FixedHeaderPackageAdapter() { FixedHeaderType = FixedHeaderType.Int })
-                     .ConfigureContainer(a => {
-                         a.AddEasyLogger((logLevel, obj, loggerString, ex) => { });//添加一个日志注入
-                     })
-                     .ConfigurePlugins(a => {
-                         a.UseTcpReconnection();// 自动重连
-                     }));
-
-                await _tcpClient.ConnectAsync();
+            } catch (Exception ex) {
+                await DisplayAlert("错误", $"发生异常: {ex.Message}", "确定");
+                await StopProxyAsync();
             }
         }
 
         public void StartUdpProxy(int udpPort) {
             try {
-                _cancellationSource = new CancellationTokenSource();
                 CancellationToken token = _cancellationSource.Token;
 
                 // 创建客户端UDP Socket
@@ -223,9 +237,22 @@ namespace RainWorldConnect {
         private async Task OnClientDisconnected(ITcpSessionClient client, ClosedEventArgs e) {
             // 移除断开的客户端
             if (Application.Current is Application application) {
-                await application.Dispatcher.DispatchAsync(() => {
+                await application.Dispatcher.DispatchAsync(async () => {
                     if (BindingContext is PlayerListViewModel playerListViewModel) {
                         playerListViewModel.PlayerDataList.Remove(playerListViewModel.PlayerDataList.First(p => p.ClientId == client.Id));
+                        AllUserInfoPackage allUserInfoPackage = new() {
+                            UserDataList = [.. playerListViewModel.PlayerDataList.Select(p => {
+                                    return new UserData{DeviceId = p.DeviceId, Port = p.Port};
+                                })]
+                        };
+                        using ByteBlock allUserInfoByteBlock = allUserInfoPackage.ToByteBlock();
+                        if (_tcpService is TcpService tcpService) {
+                            foreach (var player in playerListViewModel.PlayerDataList) {
+                                if (!player.ClientId.IsNullOrWhiteSpace()) {
+                                    await tcpService.SendAsync(player.ClientId, allUserInfoByteBlock.Memory);
+                                }
+                            }
+                        }
                     }
                 }).ConfigureFalseAwait();
             }
