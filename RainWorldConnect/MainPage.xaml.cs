@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Threading.Tasks;
 using TouchSocket.Core;
 using TouchSocket.Sockets;
 using TcpClient = TouchSocket.Sockets.TcpClient;
@@ -77,6 +78,7 @@ namespace RainWorldConnect {
                     if (BindingContext is PlayerListViewModel playerListViewModel) {
                         playerListViewModel.PlayerDataList.Add(new PlayerData {
                             DeviceId = deviceId,
+                            Remark = Preferences.Get("remark_" + deviceId, ""),
                             Port = int.Parse(UdpPortEntry.Text)
                         });
                     }
@@ -102,6 +104,7 @@ namespace RainWorldConnect {
                     _tcpClient = new();
                     _tcpClient.Connected += OnConnected;
                     _tcpClient.Received += OnDataReceived;
+                    _tcpClient.Closed += OnClosed;
 
                     //载入配置
                     await _tcpClient.SetupAsync(new TouchSocketConfig()
@@ -185,7 +188,6 @@ namespace RainWorldConnect {
                                                 await tcpClient.SendAsync(bindPortByteBlock.Memory).ConfigureFalseAwait();
                                             }
                                         }
-
                                     }
                                 });
                             }
@@ -228,7 +230,10 @@ namespace RainWorldConnect {
             if (Application.Current is Application application) {
                 await application.Dispatcher.DispatchAsync(() => {
                     if (BindingContext is PlayerListViewModel playerListViewModel) {
-                        playerListViewModel.PlayerDataList.Add(new PlayerData { ClientId = client.Id });
+                        playerListViewModel.PlayerDataList.Add(new PlayerData {
+                            ClientId = client.Id,
+                            Remark = Preferences.Get("remark_" + deviceId, ""),
+                        });
                     }
                 }).ConfigureFalseAwait();
             }
@@ -240,21 +245,29 @@ namespace RainWorldConnect {
                 await application.Dispatcher.DispatchAsync(async () => {
                     if (BindingContext is PlayerListViewModel playerListViewModel) {
                         playerListViewModel.PlayerDataList.Remove(playerListViewModel.PlayerDataList.First(p => p.ClientId == client.Id));
-                        AllUserInfoPackage allUserInfoPackage = new() {
-                            UserDataList = [.. playerListViewModel.PlayerDataList.Select(p => {
-                                    return new UserData{DeviceId = p.DeviceId, Port = p.Port};
-                                })]
-                        };
-                        using ByteBlock allUserInfoByteBlock = allUserInfoPackage.ToByteBlock();
-                        if (_tcpService is TcpService tcpService) {
-                            foreach (var player in playerListViewModel.PlayerDataList) {
-                                if (!player.ClientId.IsNullOrWhiteSpace()) {
-                                    await tcpService.SendAsync(player.ClientId, allUserInfoByteBlock.Memory);
-                                }
-                            }
-                        }
+                        await SendAllUserInfoToAllUser(playerListViewModel).ConfigureFalseAwait();
                     }
                 }).ConfigureFalseAwait();
+            }
+        }
+
+        private async Task SendAllUserInfoToAllUser(PlayerListViewModel playerListViewModel) {
+            AllUserInfoPackage allUserInfoPackage = new() {
+                UserDataList = [.. playerListViewModel.PlayerDataList.Select(p => {
+                                    return new UserData{DeviceId = p.DeviceId, Port = p.Port};
+                                })]
+            };
+            using ByteBlock allUserInfoByteBlock = allUserInfoPackage.ToByteBlock();
+            if (_tcpService is TcpService tcpService) {
+                // 创建发送任务列表
+                List<Task> sendTasks = [];
+                foreach (var player in playerListViewModel.PlayerDataList) {
+                    if (!player.ClientId.IsNullOrWhiteSpace()) {
+                        sendTasks.Add(tcpService.SendAsync(player.ClientId, allUserInfoByteBlock.Memory));
+                    }
+                }
+                // 并行执行所有发送任务并等待完成
+                await Task.WhenAll(sendTasks).ConfigureFalseAwait();
             }
         }
 
@@ -268,19 +281,7 @@ namespace RainWorldConnect {
                     await application.Dispatcher.DispatchAsync(async () => {
                         if (BindingContext is PlayerListViewModel playerListViewModel) {
                             playerListViewModel.PlayerDataList.First(p => p.ClientId == client.Id).DeviceId = devicePackage.DeviceId;
-                            AllUserInfoPackage allUserInfoPackage = new() {
-                                UserDataList = [.. playerListViewModel.PlayerDataList.Select(p => {
-                                    return new UserData{DeviceId = p.DeviceId, Port = p.Port};
-                                })]
-                            };
-                            using ByteBlock allUserInfoByteBlock = allUserInfoPackage.ToByteBlock();
-                            if (_tcpService is TcpService tcpService) {
-                                foreach (var player in playerListViewModel.PlayerDataList) {
-                                    if (!player.ClientId.IsNullOrWhiteSpace()) {
-                                        await tcpService.SendAsync(player.ClientId, allUserInfoByteBlock.Memory);
-                                    }
-                                }
-                            }
+                            await SendAllUserInfoToAllUser(playerListViewModel).ConfigureFalseAwait();
                         }
                     }).ConfigureFalseAwait();
                 }
@@ -292,19 +293,7 @@ namespace RainWorldConnect {
                             if (bindPortPackage.Port != 0 && !udpConnections.ContainsKey(bindPortPackage.Port)) {
                                 StartUdpProxy(bindPortPackage.Port);
                             }
-                            AllUserInfoPackage allUserInfoPackage = new() {
-                                UserDataList = [.. playerListViewModel.PlayerDataList.Select(p => {
-                                    return new UserData{DeviceId = p.DeviceId, Port = p.Port};
-                                })]
-                            };
-                            using ByteBlock allUserInfoByteBlock = allUserInfoPackage.ToByteBlock();
-                            if (_tcpService is TcpService tcpService) {
-                                foreach (var player in playerListViewModel.PlayerDataList) {
-                                    if (!player.ClientId.IsNullOrWhiteSpace()) {
-                                        await tcpService.SendAsync(player.ClientId, allUserInfoByteBlock.Memory);
-                                    }
-                                }
-                            }
+                            await SendAllUserInfoToAllUser(playerListViewModel).ConfigureFalseAwait();
                         }
                     }).ConfigureFalseAwait();
                 }
@@ -369,6 +358,24 @@ namespace RainWorldConnect {
                             await udpConnections[forwardPackage.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
                         }
                     }).ConfigureFalseAwait();
+                }
+            }
+        }
+
+        private async Task OnClosed(ITcpClient client, ClosedEventArgs e) {
+            if (Application.Current is Application application) {
+                await application.Dispatcher.DispatchAsync(() => {
+                    if (BindingContext is PlayerListViewModel playerListViewModel) {
+                        playerListViewModel.PlayerDataList.Clear();
+                    }
+                }).ConfigureFalseAwait();
+            }
+        }
+
+        private async void Button_Clicked_1(object sender, EventArgs e) {
+            if (sender is Button button && button.BindingContext is PlayerData playerData && BindingContext is PlayerListViewModel playerListViewModel && _tcpService is TcpService tcpService) {
+                if (tcpService.TryGetClient(playerData.ClientId, out TcpSessionClient client)) {
+                    await client.CloseAsync("踢出服务器");
                 }
             }
         }

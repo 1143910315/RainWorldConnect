@@ -149,9 +149,8 @@
                                             Padding="15,0"
                                             HeightRequest="36"
                                             VerticalOptions="Center"
-                                            Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:PlayerListViewModel}}, Path=DeleteItemCommand}"
-                                            x:DataType="viewmodel:PlayerListViewModel"
-                                            CommandParameter="{Binding .}" />
+                                            Clicked="Button_Clicked_1"
+                                            x:DataType="viewmodel:PlayerListViewModel" />
                                     </Grid>
 
                                 </Border>
