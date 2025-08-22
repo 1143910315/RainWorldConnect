@@ -401,10 +401,13 @@ namespace RainWorldConnect {
             } else if (forwardPackage.FromByteBlock(byteBlock)) {
                 if (Application.Current is Application application) {
                     await application.Dispatcher.DispatchAsync(async () => {
-                        PlayerData playerData = playerListViewModel.PlayerDataList.First(p => p.DeviceId == deviceId);
-                        IPEndPoint endpoint = new(IPAddress.Parse("127.0.0.1"), playerData.Port);
-                        playerData.TotalReceivedBytes += byteBlock.Length;
-                        await udpConnections[forwardPackage.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
+                        if (_myPlayerData is PlayerData myPlayerData) {
+                            if (playerListViewModel.PlayerDataList.FirstOrDefault(p => p.Port == forwardPackage.Port) is PlayerData playerData) {
+                                playerData.TotalReceivedBytes += byteBlock.Length;
+                            }
+                            IPEndPoint endpoint = new(IPAddress.Parse("127.0.0.1"), myPlayerData.Port);
+                            await udpConnections[forwardPackage.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
+                        }
                     }).ConfigureFalseAwait();
                 }
             }

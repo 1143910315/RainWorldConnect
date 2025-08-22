@@ -171,12 +171,12 @@
                                                 <Label
                                                     Text="{Binding SentSpeed}"
                                                     VerticalOptions="Center"
-                                                    WidthRequest="80"/>
+                                                    WidthRequest="100"/>
 
                                                 <Label
                                                     Text="{Binding RevicedSpeed}"
                                                     VerticalOptions="Center"
-                                                    WidthRequest="80"/>
+                                                    WidthRequest="100"/>
                                             </HorizontalStackLayout>
                                         </VerticalStackLayout>
 
