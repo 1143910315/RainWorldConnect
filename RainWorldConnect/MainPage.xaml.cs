@@ -32,11 +32,11 @@ namespace RainWorldConnect {
                 playerListViewModel.PlayerDataList.ForEach(p => {
                     long oldSentBytes = p.LastSentBytes;
                     long newSentBytes = p.TotalSentBytes;
-                    p.SentSpeed = FormatSpeed(newSentBytes - oldSentBytes);
+                    p.SentSpeed = "↑" + FormatSpeed(newSentBytes - oldSentBytes);
                     p.LastSentBytes = newSentBytes;
                     long oldRecvBytes = p.LastReceivedBytes;
                     long newRecvBytes = p.TotalReceivedBytes;
-                    p.RevicedSpeed = FormatSpeed(newRecvBytes - oldRecvBytes);
+                    p.RevicedSpeed = "↓" + FormatSpeed(newRecvBytes - oldRecvBytes);
                     p.LastReceivedBytes = newRecvBytes;
                 });
             };
