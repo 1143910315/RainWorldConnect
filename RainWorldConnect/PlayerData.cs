@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TouchSocket.Core;
+using TouchSocket.Sockets;
 
 namespace RainWorldConnect {
     public partial class PlayerData : ObservableObject {
@@ -41,6 +42,22 @@ namespace RainWorldConnect {
             get => _port;
             set => SetProperty(ref _port, value,
                 validate: (oldVal, newVal) => newVal >= 0); // 带验证
+        }
+
+        public TcpClient? _tcpClient;
+        public long LastReceivedBytes { get; set; } = 0;
+        public long LastSentBytes { get; set; } = 0;
+        public long TotalReceivedBytes { get; set; } = 0;
+        public long TotalSentBytes { get; set; } = 0;
+        private string _sentSpeed = "↑0.00B/s";
+        public string SentSpeed {
+            get => _sentSpeed;
+            set => SetProperty(ref _sentSpeed, value);
+        }
+        private string _revicedSpeed = "↓0.00B/s";
+        public string RevicedSpeed {
+            get => _revicedSpeed;
+            set => SetProperty(ref _revicedSpeed, value);
         }
 
         // 计算属性

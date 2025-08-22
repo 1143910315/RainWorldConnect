@@ -109,15 +109,15 @@
                                     BackgroundColor="White"
                                     Padding="15">
 
-                                    <!-- 设备ID/备注 -->
                                     <Grid
                                         Grid.Column="0"
-                                        ColumnDefinitions="Auto, *,10,Auto,65,10,Auto">
+                                        ColumnDefinitions="Auto,*,10,Auto,180,10,Auto,10,Auto,10,Auto">
                                         <Label
-                                            Text="玩家:"
+                                            Text="玩家："
                                             FontAttributes="Bold"
                                             VerticalOptions="Center" />
 
+                                        <!-- 设备ID/备注 -->
                                         <Entry
                                             Grid.Column="1"
                                             Text="{Binding Remark, Mode=TwoWay}"
@@ -126,24 +126,23 @@
                                             TextColor="#2c3e50"
                                             FontSize="15"
                                             ClearButtonVisibility="WhileEditing" />
+
                                         <Label
                                             Grid.Column="3"
-                                            Text="分配端口:"
+                                            Text="额外地址："
                                             FontAttributes="Bold"
                                             VerticalOptions="Center" />
 
                                         <Entry
                                             Grid.Column="4"
-                                            Text="{Binding Port, Mode=TwoWay}"
-                                            Keyboard="Numeric"
-                                            TextColor="#2c3e50"
+                                            Text=""
+                                            Placeholder="127.0.0.1:12345"
                                             FontSize="15" />
 
                                         <!-- 删除按钮 -->
                                         <Button
                                             Grid.Column="6"
-                                            Text="踢出"
-                                            BackgroundColor="#e74c3c"
+                                            Text="连接"
                                             TextColor="White"
                                             CornerRadius="5"
                                             Padding="15,0"
@@ -151,8 +150,48 @@
                                             VerticalOptions="Center"
                                             Clicked="Button_Clicked_1"
                                             x:DataType="viewmodel:PlayerListViewModel" />
-                                    </Grid>
 
+                                        <VerticalStackLayout
+                                            Grid.Column="8">
+                                            <HorizontalStackLayout
+                                                HorizontalOptions="Center">
+                                                <Label
+                                                    Grid.ColumnSpan="2"
+                                                    Text="分配端口："
+                                                    FontAttributes="Bold"
+                                                    VerticalOptions="Center" />
+
+                                                <Label
+                                                    Text="{Binding Port}"
+                                                    VerticalOptions="Center"
+                                                    FontSize="15" />
+                                            </HorizontalStackLayout>
+                                            <HorizontalStackLayout
+                                                Spacing="10">
+                                                <Label
+                                                    Text="{Binding SentSpeed}"
+                                                    VerticalOptions="Center"
+                                                    WidthRequest="80"/>
+
+                                                <Label
+                                                    Text="{Binding RevicedSpeed}"
+                                                    VerticalOptions="Center"
+                                                    WidthRequest="80"/>
+                                            </HorizontalStackLayout>
+                                        </VerticalStackLayout>
+
+                                        <!-- 删除按钮 -->
+                                        <Button
+                                            Grid.Column="10"
+                                            Text="踢出"
+                                            BackgroundColor="#e74c3c"
+                                            TextColor="White"
+                                            CornerRadius="5"
+                                            Padding="15,0"
+                                            HeightRequest="36"
+                                            VerticalOptions="Center"
+                                            Clicked="Button_Clicked_1" />
+                                    </Grid>
                                 </Border>
                             </ViewCell>
                         </DataTemplate>
@@ -161,5 +200,4 @@
             </Border>
         </VerticalStackLayout>
     </ScrollView>
-
 </ContentPage>

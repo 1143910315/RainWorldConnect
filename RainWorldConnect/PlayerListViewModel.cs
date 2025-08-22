@@ -9,9 +9,5 @@ using System.Windows.Input;
 namespace RainWorldConnect {
     partial class PlayerListViewModel : ObservableObject {
         public ObservableCollection<PlayerData> PlayerDataList { get; } = [];
-
-        public PlayerListViewModel() {
-        }
-
     }
 }
