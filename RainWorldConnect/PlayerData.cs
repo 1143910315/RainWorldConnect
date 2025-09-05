@@ -45,10 +45,10 @@ namespace RainWorldConnect {
         }
 
         public TcpClient? _tcpClient;
-        public long LastReceivedBytes { get; set; } = 0;
-        public long LastSentBytes { get; set; } = 0;
-        public long TotalReceivedBytes { get; set; } = 0;
-        public long TotalSentBytes { get; set; } = 0;
+        public long lastReceivedBytes = 0;
+        public long lastSentBytes = 0;
+        public long totalReceivedBytes = 0;
+        public long totalSentBytes = 0;
         private string _sentSpeed = "↑0.00B/s";
         public string SentSpeed {
             get => _sentSpeed;

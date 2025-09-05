@@ -15,7 +15,9 @@ namespace RainWorldConnect {
         private readonly string deviceId = "";
         private readonly IDispatcherTimer _refreshTimer;
         private readonly PlayerListViewModel playerListViewModel;
-        private PlayerData? _myPlayerData;
+        private readonly ConcurrentDictionary<string, PlayerData> clientIdPlayerDataMap = new();
+        private readonly ConcurrentDictionary<string, PlayerData> deviceIdPlayerDataMap = new();
+        private readonly ConcurrentDictionary<int, PlayerData> portPlayerDataMap = new();
         public MainPage() {
             InitializeComponent();
             playerListViewModel = (PlayerListViewModel)BindingContext;
@@ -30,14 +32,12 @@ namespace RainWorldConnect {
             _refreshTimer.Interval = TimeSpan.FromMilliseconds(1000);
             _refreshTimer.Tick += (s, e) => {
                 playerListViewModel.PlayerDataList.ForEach(p => {
-                    long oldSentBytes = p.LastSentBytes;
-                    long newSentBytes = p.TotalSentBytes;
+                    long newSentBytes = Interlocked.Read(ref p.totalSentBytes);
+                    long oldSentBytes = Interlocked.Exchange(ref p.lastSentBytes, newSentBytes);
                     p.SentSpeed = "↑" + FormatSpeed(newSentBytes - oldSentBytes);
-                    p.LastSentBytes = newSentBytes;
-                    long oldRecvBytes = p.LastReceivedBytes;
-                    long newRecvBytes = p.TotalReceivedBytes;
+                    long newRecvBytes = Interlocked.Read(ref p.totalReceivedBytes);
+                    long oldRecvBytes = Interlocked.Exchange(ref p.lastReceivedBytes, newRecvBytes);
                     p.RevicedSpeed = "↓" + FormatSpeed(newRecvBytes - oldRecvBytes);
-                    p.LastReceivedBytes = newRecvBytes;
                 });
             };
             _refreshTimer.Start();
@@ -91,10 +91,11 @@ namespace RainWorldConnect {
                 if (IsHostCheckBox.IsChecked) {
                     PlayerData playerData = new() {
                         DeviceId = deviceId,
-                        Remark = Preferences.Get("remark_" + deviceId, ""),
-                        Port = int.Parse(UdpPortEntry.Text)
+                        Remark = Preferences.Get("remark_" + deviceId, "")
                     };
-                    _myPlayerData = playerData;
+                    clientIdPlayerDataMap[""] = playerData;
+                    deviceIdPlayerDataMap[deviceId] = playerData;
+                    playerData.Port = int.Parse(UdpPortEntry.Text);
                     int port = int.Parse(TcpPortEntry.Text);
                     playerListViewModel.PlayerDataList.Add(playerData);
                     _tcpService = new();
@@ -116,7 +117,6 @@ namespace RainWorldConnect {
                         await StopProxyAsync();
                     }
                 } else {
-                    _myPlayerData = null;
                     _tcpClient = new();
                     _tcpClient.Connected += OnConnected;
                     _tcpClient.Received += OnDataReceived;
@@ -174,6 +174,9 @@ namespace RainWorldConnect {
             }
             udpConnections.Clear();
             playerListViewModel.PlayerDataList.Clear();
+            clientIdPlayerDataMap.Clear();
+            deviceIdPlayerDataMap.Clear();
+            portPlayerDataMap.Clear();
         }
 
         private async Task ReceiveUdpData(int udpPort, CancellationToken token) {
@@ -190,50 +193,40 @@ namespace RainWorldConnect {
                             continue;
                         }
                         if (_tcpClient is TcpClient tcpClient) {
-                            if (Application.Current is Application application) {
-                                await application.Dispatcher.DispatchAsync(async () => {
-                                    ForwardPackage forwardPackage = new() {
-                                        Port = udpPort,
-                                        Bytes = buffer.AsMemory(0, result.ReceivedBytes).ToArray()
-                                    };
-                                    using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
-                                    if (_myPlayerData is PlayerData myPlayerData) {
-                                        if (result.RemoteEndPoint is IPEndPoint remoteEndPoint) {
-                                            if (myPlayerData.Port != remoteEndPoint.Port) {
-                                                BindPortPackage bindPortPackage = new() {
-                                                    Port = remoteEndPoint.Port,
-                                                };
-                                                using ByteBlock bindPortByteBlock = bindPortPackage.ToByteBlock();
-                                                myPlayerData.TotalSentBytes += bindPortByteBlock.Length;
-                                                await tcpClient.SendAsync(bindPortByteBlock.Memory);
-                                            }
-                                        }
-                                        myPlayerData.TotalSentBytes += forwardByteBlock.Length;
+                            ForwardPackage forwardPackage = new() {
+                                Port = udpPort,
+                                Bytes = buffer.AsMemory(0, result.ReceivedBytes).ToArray()
+                            };
+                            using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
+                            if (clientIdPlayerDataMap.TryGetValue("", out PlayerData? myPlayerData)) {
+                                if (result.RemoteEndPoint is IPEndPoint remoteEndPoint) {
+                                    if (myPlayerData.Port != remoteEndPoint.Port) {
+                                        BindPortPackage bindPortPackage = new() {
+                                            Port = remoteEndPoint.Port,
+                                        };
+                                        using ByteBlock bindPortByteBlock = bindPortPackage.ToByteBlock();
+                                        await tcpClient.SendAsync(bindPortByteBlock.Memory);
+                                        Interlocked.Add(ref myPlayerData.totalSentBytes, bindPortByteBlock.Length);
                                     }
-                                    if (playerListViewModel.PlayerDataList.FirstOrDefault(p => p.Port == udpPort) is PlayerData targetPlayerData) {
-                                        targetPlayerData.TotalSentBytes += forwardByteBlock.Length;
-                                    }
-                                    await tcpClient.SendAsync(forwardByteBlock.Memory).ConfigureFalseAwait();
-                                });
+                                }
+                                await tcpClient.SendAsync(forwardByteBlock.Memory).ConfigureFalseAwait();
+                                Interlocked.Add(ref myPlayerData.totalSentBytes, forwardByteBlock.Length);
+                                if (portPlayerDataMap.TryGetValue(udpPort, out PlayerData? targetPlayerData)) {
+                                    Interlocked.Add(ref targetPlayerData.totalSentBytes, forwardByteBlock.Length);
+                                }
                             }
                         } else if (_tcpService is TcpService tcpService) {
-                            if (Application.Current is Application application) {
-                                await application.Dispatcher.DispatchAsync(async () => {
-                                    if (result.RemoteEndPoint is IPEndPoint remoteEndPoint) {
-                                        PlayerData playerData = playerListViewModel.PlayerDataList.First(p => p.DeviceId == deviceId);
-                                        PlayerData targetPlayerData = playerListViewModel.PlayerDataList.First(p => p.Port == udpPort);
-                                        if (playerData.Port != remoteEndPoint.Port) {
-                                        }
-                                        ForwardPackage forwardPackage = new() {
-                                            Port = remoteEndPoint.Port,
-                                            Bytes = buffer.AsMemory(0, result.ReceivedBytes).ToArray()
-                                        };
-                                        using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
-                                        playerData.TotalSentBytes += forwardByteBlock.Length;
-                                        targetPlayerData.TotalSentBytes += forwardByteBlock.Length;
-                                        await tcpService.SendAsync(targetPlayerData.ClientId, forwardByteBlock.Memory).ConfigureFalseAwait();
-                                    }
-                                }).ConfigureFalseAwait();
+                            if (result.RemoteEndPoint is IPEndPoint remoteEndPoint && portPlayerDataMap.TryGetValue(udpPort, out PlayerData? targetPlayerData)) {
+                                ForwardPackage forwardPackage = new() {
+                                    Port = remoteEndPoint.Port,
+                                    Bytes = buffer.AsMemory(0, result.ReceivedBytes).ToArray()
+                                };
+                                using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
+                                await tcpService.SendAsync(targetPlayerData.ClientId, forwardByteBlock.Memory).ConfigureFalseAwait();
+                                if (clientIdPlayerDataMap.TryGetValue("", out PlayerData? myPlayerData)) {
+                                    Interlocked.Add(ref myPlayerData.totalSentBytes, forwardByteBlock.Length);
+                                }
+                                Interlocked.Add(ref targetPlayerData.totalSentBytes, forwardByteBlock.Length);
                             }
                         }
                     } catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset) {
@@ -246,32 +239,42 @@ namespace RainWorldConnect {
         }
 
         private async Task SendAllUserInfoToAllUser() {
-            AllUserInfoPackage allUserInfoPackage = new() {
-                UserDataList = [.. playerListViewModel.PlayerDataList.Select(p => {
-                                    return new UserData{DeviceId = p.DeviceId, Port = p.Port};
-                                })]
-            };
-            using ByteBlock allUserInfoByteBlock = allUserInfoPackage.ToByteBlock();
-            if (_tcpService is TcpService tcpService && _myPlayerData is PlayerData myPlayerData) {
-                // 创建发送任务列表
-                List<Task> sendTasks = [.. playerListViewModel.PlayerDataList.Where(player => player != myPlayerData).Select(player => {
-                    player.TotalSentBytes += allUserInfoByteBlock.Length;
-                    myPlayerData.TotalReceivedBytes += allUserInfoByteBlock.Length;
-                    return tcpService.SendAsync(player.ClientId, allUserInfoByteBlock.Memory);
-                })];
-                // 并行执行所有发送任务并等待完成
-                await Task.WhenAll(sendTasks).ConfigureFalseAwait();
+            if (clientIdPlayerDataMap.TryGetValue("", out PlayerData? myPlayerData)) {
+                AllUserInfoPackage allUserInfoPackage = new() {
+                    UserDataList = [.. deviceIdPlayerDataMap.Select(pair => {
+                        return new UserData{DeviceId = pair.Value.DeviceId, Port = pair.Value.Port};
+                    })]
+                };
+                using ByteBlock allUserInfoByteBlock = allUserInfoPackage.ToByteBlock();
+                if (_tcpService is TcpService tcpService) {
+                    // 创建发送任务列表
+                    IEnumerable<Task<PlayerData>> sendTasks = clientIdPlayerDataMap.Where(pair => pair.Key != "").Select(pair => Task.Run(async () => {
+                        await tcpService.SendAsync(pair.Value.ClientId, allUserInfoByteBlock.Memory);
+                        return pair.Value;
+                    }));
+                    try {
+                        // 并行执行所有发送任务并等待完成
+                        await Task.WhenAll(sendTasks);
+                    } catch (Exception) { }
+                    foreach (Task<PlayerData> task in sendTasks) {
+                        if (task.IsCompletedSuccessfully) {
+                            Interlocked.Add(ref task.Result.totalSentBytes, allUserInfoByteBlock.Length);
+                            Interlocked.Add(ref myPlayerData.totalSentBytes, allUserInfoByteBlock.Length);
+                        }
+                    }
+                }
             }
         }
 
-        private async Task OnClientConnected(ITcpSessionClient client, ConnectedEventArgs e) {
-            if (Application.Current is Application application) {
-                await application.Dispatcher.DispatchAsync(() => {
-                    playerListViewModel.PlayerDataList.Add(new PlayerData {
-                        ClientId = client.Id,
-                    });
-                }).ConfigureFalseAwait();
-            }
+        private Task OnClientConnected(ITcpSessionClient client, ConnectedEventArgs e) {
+            PlayerData playerData = new() {
+                ClientId = client.Id,
+            };
+            clientIdPlayerDataMap[client.Id] = playerData;
+            MainThread.BeginInvokeOnMainThread(() => {
+                playerListViewModel.PlayerDataList.Add(playerData);
+            });
+            return EasyTask.CompletedTask;
         }
 
         private async Task OnClientDataReceived(ITcpSessionClient client, ReceivedDataEventArgs e) {
@@ -279,76 +282,70 @@ namespace RainWorldConnect {
             DevicePackage devicePackage = new();
             BindPortPackage bindPortPackage = new();
             ForwardPackage forwardPackage = new();
-            if (_myPlayerData is PlayerData myPlayerData) {
-                myPlayerData.TotalReceivedBytes += byteBlock.Length;
-            }
-            if (devicePackage.FromByteBlock(byteBlock)) {
-                if (Application.Current is Application application) {
-                    await application.Dispatcher.DispatchAsync(async () => {
-                        if (_tcpService is TcpService tcpService) {
-                            playerListViewModel.PlayerDataList.Where(p => p.DeviceId == devicePackage.DeviceId).ForEach(async p => {
-                                if (tcpService.TryGetClient(p.ClientId, out TcpSessionClient client)) {
-                                    await client.CloseAsync("踢出服务器");
-                                }
-                            });
+            if (clientIdPlayerDataMap.TryGetValue("", out PlayerData? myPlayerData)
+                && clientIdPlayerDataMap.TryGetValue(client.Id, out PlayerData? clientPlayerData)
+                && _tcpService is TcpService tcpService) {
+                Interlocked.Add(ref myPlayerData.totalReceivedBytes, byteBlock.Length);
+                Interlocked.Add(ref clientPlayerData.totalReceivedBytes, byteBlock.Length);
+                if (devicePackage.FromByteBlock(byteBlock)) {
+                    if (deviceIdPlayerDataMap.TryGetValue(devicePackage.DeviceId, out PlayerData? kickPlayerData)) {
+                        if (tcpService.TryGetClient(kickPlayerData.ClientId, out TcpSessionClient kickClient)) {
+                            await kickClient.CloseAsync("踢出服务器");
                         }
-                        if (playerListViewModel.PlayerDataList.FirstOrDefault(p => p.ClientId == client.Id) is PlayerData playerData) {
-                            playerData.DeviceId = devicePackage.DeviceId;
-                            playerData.Remark = Preferences.Get("remark_" + devicePackage.DeviceId, "");
-                            playerData.TotalReceivedBytes += byteBlock.Length;
-                        }
-                        await SendAllUserInfoToAllUser().ConfigureFalseAwait();
+                    }
+                    await MainThread.InvokeOnMainThreadAsync(() => {
+                        deviceIdPlayerDataMap.Remove(clientPlayerData.DeviceId, out _);
+                        clientPlayerData.DeviceId = devicePackage.DeviceId;
+                        deviceIdPlayerDataMap[devicePackage.DeviceId] = clientPlayerData;
+                        clientPlayerData.Remark = Preferences.Get("remark_" + devicePackage.DeviceId, "");
                     }).ConfigureFalseAwait();
-                }
-            } else if (bindPortPackage.FromByteBlock(byteBlock)) {
-                if (Application.Current is Application application) {
-                    await application.Dispatcher.DispatchAsync(async () => {
-                        if (playerListViewModel.PlayerDataList.FirstOrDefault(p => p.ClientId == client.Id) is PlayerData playerData) {
-                            playerData.Port = bindPortPackage.Port;
-                            playerData.TotalReceivedBytes += byteBlock.Length;
-                        }
-                        if (bindPortPackage.Port != 0 && !udpConnections.ContainsKey(bindPortPackage.Port)) {
-                            StartUdpProxy(bindPortPackage.Port);
-                        }
-                        await SendAllUserInfoToAllUser().ConfigureFalseAwait();
+                    await SendAllUserInfoToAllUser().ConfigureFalseAwait();
+                } else if (bindPortPackage.FromByteBlock(byteBlock)) {
+                    if (bindPortPackage.Port != 0 && !udpConnections.ContainsKey(bindPortPackage.Port)) {
+                        StartUdpProxy(bindPortPackage.Port);
+                    }
+                    await MainThread.InvokeOnMainThreadAsync(() => {
+                        portPlayerDataMap.Remove(clientPlayerData.Port, out _);
+                        clientPlayerData.Port = bindPortPackage.Port;
+                        portPlayerDataMap[bindPortPackage.Port] = clientPlayerData;
                     }).ConfigureFalseAwait();
-                }
-            } else if (forwardPackage.FromByteBlock(byteBlock)) {
-                if (Application.Current is Application application) {
-                    await application.Dispatcher.DispatchAsync(async () => {
-                        if (playerListViewModel.PlayerDataList.FirstOrDefault(p => p.ClientId == client.Id) is PlayerData playerData) {
-                            playerData.TotalReceivedBytes += byteBlock.Length;
+                    await SendAllUserInfoToAllUser().ConfigureFalseAwait();
+                } else if (forwardPackage.FromByteBlock(byteBlock)) {
+                    if (portPlayerDataMap.TryGetValue(forwardPackage.Port, out PlayerData? targetPlayerData)) {
+                        string clientID = targetPlayerData.ClientId;
+                        IPEndPoint endpoint = new(IPAddress.Parse("127.0.0.1"), forwardPackage.Port);
+                        forwardPackage.Port = clientPlayerData.Port;
+                        if (clientID.IsNullOrWhiteSpace()) {
+                            await udpConnections[clientPlayerData.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
+                        } else {
+                            using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
+                            Interlocked.Add(ref targetPlayerData.totalSentBytes, forwardByteBlock.Length);
+                            await tcpService.SendAsync(clientID, forwardByteBlock.Memory).ConfigureFalseAwait();
+                            Interlocked.Add(ref myPlayerData.totalSentBytes, forwardByteBlock.Length);
                         }
-                        if (playerListViewModel.PlayerDataList.FirstOrDefault(p => p.Port == forwardPackage.Port) is PlayerData targetPlayerData) {
-                            string clientID = targetPlayerData.ClientId;
-                            IPEndPoint endpoint = new(IPAddress.Parse("127.0.0.1"), forwardPackage.Port);
-                            forwardPackage.Port = playerListViewModel.PlayerDataList.First(p => p.ClientId == client.Id).Port;
-                            if (_tcpService is TcpService tcpService) {
-                                if (clientID.IsNullOrWhiteSpace()) {
-                                    await udpConnections[forwardPackage.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
-                                } else {
-                                    using ByteBlock forwardByteBlock = forwardPackage.ToByteBlock();
-                                    targetPlayerData.TotalSentBytes += forwardByteBlock.Length;
-                                    await tcpService.SendAsync(clientID, forwardByteBlock.Memory).ConfigureFalseAwait();
-                                }
-                            }
-                        }
-                    }).ConfigureFalseAwait();
+                    }
                 }
             }
         }
 
         private async Task OnClientClosed(ITcpSessionClient client, ClosedEventArgs e) {
             // 移除断开的客户端
-            if (Application.Current is Application application) {
-                await application.Dispatcher.DispatchAsync(async () => {
-                    playerListViewModel.PlayerDataList.Remove(playerListViewModel.PlayerDataList.First(p => p.ClientId == client.Id));
+            await MainThread.InvokeOnMainThreadAsync(async () => {
+                if (clientIdPlayerDataMap.TryRemove(client.Id, out PlayerData? clientPlayerData)) {
+                    deviceIdPlayerDataMap.Remove(clientPlayerData.DeviceId, out _);
+                    portPlayerDataMap.Remove(clientPlayerData.Port, out _);
+                    playerListViewModel.PlayerDataList.Remove(clientPlayerData);
                     await SendAllUserInfoToAllUser().ConfigureFalseAwait();
-                }).ConfigureFalseAwait();
-            }
+                }
+            }).ConfigureFalseAwait();
         }
 
         private async Task OnConnected(ITcpClient client, ConnectedEventArgs e) {
+            PlayerData playerData = new() {
+                DeviceId = deviceId,
+                Remark = Preferences.Get("remark_" + deviceId, "")
+            };
+            deviceIdPlayerDataMap[deviceId] = playerData;
             // 发送注册消息
             DevicePackage deviceInformationPackage = new() {
                 DeviceId = deviceId
@@ -361,64 +358,47 @@ namespace RainWorldConnect {
             using ByteBlock byteBlock = e.ByteBlock;
             AllUserInfoPackage allUserInfoPackage = new();
             ForwardPackage forwardPackage = new();
-            if (_myPlayerData is PlayerData myPlayerData) {
-                myPlayerData.TotalReceivedBytes += byteBlock.Length;
-            }
-            if (allUserInfoPackage.FromByteBlock(byteBlock)) {
-                if (Application.Current is Application application) {
-                    await application.Dispatcher.DispatchAsync(() => {
-                        Dictionary<string, long> lastReceivedBytesDict = [];
-                        Dictionary<string, long> lastSentBytesDict = [];
-                        Dictionary<string, long> totalReceivedBytesDict = [];
-                        Dictionary<string, long> totalSentBytesDict = [];
-                        playerListViewModel.PlayerDataList.ForEach(p => {
-                            lastReceivedBytesDict[p.DeviceId] = p.LastReceivedBytes;
-                            lastSentBytesDict[p.DeviceId] = p.LastSentBytes;
-                            totalReceivedBytesDict[p.DeviceId] = p.TotalReceivedBytes;
-                            totalSentBytesDict[p.DeviceId] = p.TotalSentBytes;
-                        });
+            if (deviceIdPlayerDataMap.TryGetValue(deviceId, out PlayerData? myPlayerData)) {
+                Interlocked.Add(ref myPlayerData.totalReceivedBytes, byteBlock.Length);
+                if (allUserInfoPackage.FromByteBlock(byteBlock)) {
+                    await MainThread.InvokeOnMainThreadAsync(() => {
+                        IEnumerable<PlayerData> newPlayerDataList = allUserInfoPackage.UserDataList.Select(userData =>
+                            deviceIdPlayerDataMap.TryGetValue(userData.DeviceId, out PlayerData? playerData)
+                                ? playerData
+                                : new() {
+                                    DeviceId = userData.DeviceId,
+                                    Remark = Preferences.Get("remark_" + userData.DeviceId, ""),
+                                    Port = userData.Port,
+                                }
+                        );
                         playerListViewModel.PlayerDataList.Clear();
-                        foreach (UserData userData in allUserInfoPackage.UserDataList) {
-                            PlayerData playerData = new() {
-                                DeviceId = userData.DeviceId,
-                                Remark = Preferences.Get("remark_" + userData.DeviceId, ""),
-                                Port = userData.Port,
-                                LastReceivedBytes = lastReceivedBytesDict.GetValueOrDefault(userData.DeviceId, 0),
-                                LastSentBytes = lastSentBytesDict.GetValueOrDefault(userData.DeviceId, 0),
-                                TotalReceivedBytes = totalReceivedBytesDict.GetValueOrDefault(userData.DeviceId, 0),
-                                TotalSentBytes = totalSentBytesDict.GetValueOrDefault(userData.DeviceId, 0),
-                            };
-                            if (userData.DeviceId == deviceId) {
-                                _myPlayerData = playerData;
-                            }
-                            playerListViewModel.PlayerDataList.Add(playerData);
-                            if (userData.DeviceId != deviceId && !udpConnections.ContainsKey(userData.Port)) {
-                                StartUdpProxy(userData.Port);
+                        deviceIdPlayerDataMap.Clear();
+                        portPlayerDataMap.Clear();
+                        foreach (PlayerData p in newPlayerDataList) {
+                            playerListViewModel.PlayerDataList.Add(p);
+                            deviceIdPlayerDataMap[p.DeviceId] = p;
+                            portPlayerDataMap[p.Port] = p;
+                            if (p.DeviceId != deviceId && !udpConnections.ContainsKey(p.Port)) {
+                                StartUdpProxy(p.Port);
                             }
                         }
                     }).ConfigureFalseAwait();
-                }
-            } else if (forwardPackage.FromByteBlock(byteBlock)) {
-                if (Application.Current is Application application) {
-                    await application.Dispatcher.DispatchAsync(async () => {
-                        if (_myPlayerData is PlayerData myPlayerData) {
-                            if (playerListViewModel.PlayerDataList.FirstOrDefault(p => p.Port == forwardPackage.Port) is PlayerData playerData) {
-                                playerData.TotalReceivedBytes += byteBlock.Length;
-                            }
-                            IPEndPoint endpoint = new(IPAddress.Parse("127.0.0.1"), myPlayerData.Port);
-                            await udpConnections[forwardPackage.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
-                        }
-                    }).ConfigureFalseAwait();
+                } else if (forwardPackage.FromByteBlock(byteBlock)) {
+                    if (portPlayerDataMap.TryGetValue(forwardPackage.Port, out PlayerData? targetPlayerData)) {
+                        Interlocked.Add(ref targetPlayerData.totalReceivedBytes, byteBlock.Length);
+                        IPEndPoint endpoint = new(IPAddress.Parse("127.0.0.1"), myPlayerData.Port);
+                        await udpConnections[forwardPackage.Port].SendToAsync(forwardPackage.Bytes, endpoint).ConfigureFalseAwait();
+                    }
                 }
             }
         }
 
         private async Task OnClosed(ITcpClient client, ClosedEventArgs e) {
-            if (Application.Current is Application application) {
-                await application.Dispatcher.DispatchAsync(() => {
-                    playerListViewModel.PlayerDataList.Clear();
-                }).ConfigureFalseAwait();
-            }
+            await MainThread.InvokeOnMainThreadAsync(() => {
+                playerListViewModel.PlayerDataList.Clear();
+                deviceIdPlayerDataMap.Clear();
+                portPlayerDataMap.Clear();
+            }).ConfigureFalseAwait();
         }
 
         private async void Button_Clicked_1(object sender, EventArgs e) {
