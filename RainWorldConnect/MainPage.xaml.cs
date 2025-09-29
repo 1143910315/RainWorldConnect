@@ -357,10 +357,10 @@ namespace RainWorldConnect {
 
         public async Task StopProxyAsync() {
             if (_tcpService is TcpService tcpService) {
-                await tcpService.StopAsync().ConfigureFalseAwait();
+                await tcpService.StopAsync();
             }
             if (_tcpClient is TcpClient tcpClient) {
-                await tcpClient.CloseAsync().ConfigureFalseAwait();
+                await tcpClient.CloseAsync();
             }
             _tcpService = null;
             _tcpClient = null;
