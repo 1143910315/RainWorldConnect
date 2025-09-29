@@ -3,8 +3,8 @@ using RainWorldConnect.Network.Base;
 
 namespace RainWorldConnect.Network.Package {
     [GeneratorSerializable]
-    internal partial class BindPortPackage : BinaryPackageBase {
+    internal partial class SwitchServiceIdPackage : BinaryPackageBase {
         [SerializableMember(Index = 0, SkipNullCheck = true)]
-        public int Port { get; set; } = 0;
+        public int Index { get; set; } = 0;
     }
 }

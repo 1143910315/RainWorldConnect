@@ -3,16 +3,11 @@ using RainWorldConnect.Network.Base;
 
 namespace RainWorldConnect.Network.Package {
     [GeneratorSerializable]
-    internal partial class UserData : ISerializeBase {
+    internal partial class ConfirmRegisterPackage : BinaryPackageBase {
         [SerializableMember(Index = 0, SkipNullCheck = true)]
         public string DeviceId { get; set; } = "";
 
         [SerializableMember(Index = 1, SkipNullCheck = true)]
-        public int Port { get; set; } = 0;
-    }
-    [GeneratorSerializable]
-    internal partial class AllUserInfoPackage : BinaryPackageBase {
-        [SerializableMember(Index = 0, SkipNullCheck = true)]
-        public UserData[] UserDataList { get; set; } = [];
+        public string AuthenticationId { get; set; } = "";
     }
 }

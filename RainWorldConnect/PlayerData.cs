@@ -1,8 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using TouchSocket.Core;
 using TouchSocket.Sockets;
 
@@ -49,12 +44,12 @@ namespace RainWorldConnect {
         public long lastSentBytes = 0;
         public long totalReceivedBytes = 0;
         public long totalSentBytes = 0;
-        private string _sentSpeed = "↑0.00B/s";
+        private string _sentSpeed = "↑0 B/s";
         public string SentSpeed {
             get => _sentSpeed;
             set => SetProperty(ref _sentSpeed, value);
         }
-        private string _revicedSpeed = "↓0.00B/s";
+        private string _revicedSpeed = "↓0 B/s";
         public string RevicedSpeed {
             get => _revicedSpeed;
             set => SetProperty(ref _revicedSpeed, value);

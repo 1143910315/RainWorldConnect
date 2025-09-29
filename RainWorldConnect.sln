@@ -1,9 +1,15 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36221.1 d17.14
+VisualStudioVersion = 17.14.36221.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RainWorldConnect", "RainWorldConnect\RainWorldConnect.csproj", "{8A3C9B60-712E-4250-8BDE-76A5D17B306B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RainWorldConnectTests", "RainWorldConnectTests\RainWorldConnectTests.csproj", "{489E969C-5522-473E-955A-754D5CEEE997}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SourceGenerator", "SourceGenerator\SourceGenerator.csproj", "{9083E568-92E4-4596-8817-7959793ED733}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RainWorldConnectBenchmark", "RainWorldConnectBenchmark\RainWorldConnectBenchmark.csproj", "{C8D1FDAE-C416-40DE-8EBD-DDED190C3560}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +21,19 @@ Global
 		{8A3C9B60-712E-4250-8BDE-76A5D17B306B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8A3C9B60-712E-4250-8BDE-76A5D17B306B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8A3C9B60-712E-4250-8BDE-76A5D17B306B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8A3C9B60-712E-4250-8BDE-76A5D17B306B}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{489E969C-5522-473E-955A-754D5CEEE997}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{489E969C-5522-473E-955A-754D5CEEE997}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{489E969C-5522-473E-955A-754D5CEEE997}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{489E969C-5522-473E-955A-754D5CEEE997}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9083E568-92E4-4596-8817-7959793ED733}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9083E568-92E4-4596-8817-7959793ED733}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9083E568-92E4-4596-8817-7959793ED733}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9083E568-92E4-4596-8817-7959793ED733}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C8D1FDAE-C416-40DE-8EBD-DDED190C3560}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C8D1FDAE-C416-40DE-8EBD-DDED190C3560}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C8D1FDAE-C416-40DE-8EBD-DDED190C3560}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C8D1FDAE-C416-40DE-8EBD-DDED190C3560}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
