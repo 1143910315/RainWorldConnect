@@ -245,9 +245,11 @@ namespace RainWorldConnect {
                     foreach (PlayerData p in newPlayerDataList) {
                         playerListViewModel.PlayerDataList.Add(p);
                         deviceIdPlayerDataMap[p.DeviceId] = p;
-                        portPlayerDataMap[p.Port] = p;
-                        if (p != myPlayerData && !udpConnections.ContainsKey(p.Port)) {
-                            StartUdpProxy(p.Port);
+                        if (p.Port != 0) {
+                            portPlayerDataMap[p.Port] = p;
+                            if (p != myPlayerData && !udpConnections.ContainsKey(p.Port)) {
+                                StartUdpProxy(p.Port);
+                            }
                         }
                     }
                 }
@@ -492,9 +494,9 @@ namespace RainWorldConnect {
         private async Task OnClientClosed(ITcpSessionClient client, ClosedEventArgs e) {
             // 移除断开的客户端
             await MainThread.InvokeOnMainThreadAsync(() => {
-                if (clientIdPlayerDataMap.TryRemove(client.Id, out PlayerData? clientPlayerData)) {
-                    deviceIdPlayerDataMap.Remove(clientPlayerData.DeviceId, out _);
-                    portPlayerDataMap.Remove(clientPlayerData.Port, out _);
+                if (clientIdPlayerDataMap.TryRemove(client.Id, out var clientPlayerData)) {
+                    deviceIdPlayerDataMap.TryRemove(clientPlayerData.DeviceId, out _);
+                    portPlayerDataMap.TryRemove(clientPlayerData.Port, out _);
                     playerListViewModel.PlayerDataList.Remove(clientPlayerData);
                     SendAllUserInfoToAllUser();
                 }
