@@ -132,34 +132,37 @@ namespace RainWorldConnect {
                         })
                         .ConfigureContainer(a => {
                             a.AddEasyLogger((logLevel, obj, loggerString, ex) => { });//添加一个日志注入
-                        }));
+                        })
+                    ).ConfigureFalseAwait();
                     try {
-                        await _tcpService.StartAsync();
+                        await _tcpService.StartAsync().ConfigureFalseAwait();
                     } catch (Exception ex) {
                         await DisplayAlert("错误", $"尝试在{port}端口启动服务器时出现问题，疑似端口占用，更换端口可能解决问题。\n发生异常: {ex.Message}", "确定");
                         await StopProxyAsync();
                     }
                 } else {
-                    _tcpClient = new();
-                    _tcpClient.Closed += OnClosed;
+                    var newTcpClient = new TcpClient();
+                    _tcpClient = newTcpClient;
+                    newTcpClient = new();
+                    newTcpClient.Closed += OnClosed;
                     //载入配置
-                    await _tcpClient.SetupAsync(new TouchSocketConfig()
+                    await newTcpClient.SetupAsync(new TouchSocketConfig()
                          .SetRemoteIPHost(RemoteHostEntry.Text)
                          .SetTcpDataHandlingAdapter(CreatePackageHandlingAdapter)
                          .ConfigurePlugins(a => {
                              a.UseReconnection<TcpClient>();// 自动重连
-                             a.Add(new TcpClientReceivedPlugin<BinaryPackageBase, TcpClient>(PackageClientHandler, _tcpClient));
-                             a.Add(new TcpClientReceivedPlugin<AllUserInfoPackage, TcpClient>(AllUserInfoPackageClientHandler, _tcpClient));
-                             a.Add(new TcpClientReceivedPlugin<ForwardPackage, TcpClient>(ForwardPackageClientHandler, _tcpClient));
-                             a.Add(new TcpClientReceivedPlugin<ServiceIdPackage, TcpClient>(ServiceIdPackageClientHandler, _tcpClient));
-                             a.Add(new TcpClientReceivedPlugin<ConfirmRegisterPackage, TcpClient>(ConfirmRegisterPackageClientHandler, _tcpClient));
+                             a.Add(new TcpClientReceivedPlugin<BinaryPackageBase, TcpClient>(PackageClientHandler, newTcpClient));
+                             a.Add(new TcpClientReceivedPlugin<AllUserInfoPackage, TcpClient>(AllUserInfoPackageClientHandler, newTcpClient));
+                             a.Add(new TcpClientReceivedPlugin<ForwardPackage, TcpClient>(ForwardPackageClientHandler, newTcpClient));
+                             a.Add(new TcpClientReceivedPlugin<ServiceIdPackage, TcpClient>(ServiceIdPackageClientHandler, newTcpClient));
+                             a.Add(new TcpClientReceivedPlugin<ConfirmRegisterPackage, TcpClient>(ConfirmRegisterPackageClientHandler, newTcpClient));
                          })
                          .ConfigureContainer(a => {
                              a.AddEasyLogger((logLevel, obj, loggerString, ex) => { });//添加一个日志注入
                          })
-                    );
+                    ).ConfigureFalseAwait();
                     try {
-                        await _tcpClient.ConnectAsync();
+                        await newTcpClient.ConnectAsync().ConfigureFalseAwait();
                     } catch (Exception ex) {
                         await DisplayAlert("错误", $"尝试连接到{RemoteHostEntry.Text}时出现问题，疑似地址错误、端口错误或者无网络，无法连接。\n发生异常: {ex.Message}", "确定");
                         await StopProxyAsync();
@@ -358,9 +361,12 @@ namespace RainWorldConnect {
         public async Task StopProxyAsync() {
             if (_tcpService is TcpService tcpService) {
                 await tcpService.StopAsync();
+                tcpService.Dispose();
             }
             if (_tcpClient is TcpClient tcpClient) {
+                tcpClient.SetPauseReconnection(true);
                 await tcpClient.CloseAsync();
+                tcpClient.Dispose();
             }
             _tcpService = null;
             _tcpClient = null;

@@ -1,9 +1,9 @@
-﻿using RainWorldConnect.Network.Base;
+using RainWorldConnect.Network.Base;
 using System.Buffers.Binary;
 using TouchSocket.Core;
 
 namespace RainWorldConnect.Network.Adapter {
-    internal class PackageHandlingAdapter : CustomDataHandlingAdapter<BinaryPackageBase> {
+    public partial class PackageHandlingAdapter : CustomDataHandlingAdapter<BinaryPackageBase> {
         // 存储不同类型包的回调委托
         private readonly TypeKeyedCollection packageWrapperCollection = [];
         protected override FilterResult Filter<TReader>(ref TReader reader, bool beCached, ref BinaryPackageBase request) {

@@ -3,7 +3,7 @@ using RainWorldConnect.Network.Base;
 
 namespace RainWorldConnect.Network.Package {
     [GeneratorSerializable]
-    internal partial class ServiceIdPackage : BinaryPackageBase {
+    public partial class ServiceIdPackage : BinaryPackageBase {
         [SerializableMember(Index = 0, SkipNullCheck = true)]
         public int Index { get; set; } = 0;
         [SerializableMember(Index = 1, SkipNullCheck = true)]

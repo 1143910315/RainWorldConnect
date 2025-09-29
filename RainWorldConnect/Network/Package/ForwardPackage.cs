@@ -3,7 +3,7 @@ using RainWorldConnect.Network.Base;
 
 namespace RainWorldConnect.Network.Package {
     [GeneratorSerializable]
-    internal partial class ForwardPackage : BinaryPackageBase {
+    public partial class ForwardPackage : BinaryPackageBase {
         [SerializableMember(Index = 0)]
         public int Port { get; set; } = 0;
         [SerializableMember(Index = 1)]

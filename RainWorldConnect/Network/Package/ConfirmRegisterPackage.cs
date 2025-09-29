@@ -3,7 +3,7 @@ using RainWorldConnect.Network.Base;
 
 namespace RainWorldConnect.Network.Package {
     [GeneratorSerializable]
-    internal partial class ConfirmRegisterPackage : BinaryPackageBase {
+    public partial class ConfirmRegisterPackage : BinaryPackageBase {
         [SerializableMember(Index = 0, SkipNullCheck = true)]
         public string DeviceId { get; set; } = "";
 
